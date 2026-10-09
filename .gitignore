@@ -16,3 +16,5 @@ playwright/.cache/
 .DS_Store
 
 *.log
+
+.browser-profile/

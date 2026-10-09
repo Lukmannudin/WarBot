@@ -18,3 +18,5 @@ playwright/.cache/
 *.log
 
 .browser-profile/
+
+src/config/participant.ts

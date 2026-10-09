@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+
+    <title>Ticket War Bot Simulator</title>
+
+    <link rel="stylesheet" href="/styles.css" />
+
+    <script src="/app.js" defer></script>
+  </head>
+
+  <body>
+    <main class="container">
+      <header class="page-header">
+        <span class="badge">LOCAL SIMULATOR</span>
+
+        <h1>Intimate Night with Kahitna</h1>
+
+        <p>
+          Ticket War Bot testing environment
+        </p>
+      </header>
+
+      <section class="panel">
+        <h2>Simulator Configuration</h2>
+
+        <div class="config-grid">
+          <label for="scenario">
+            Purchase Scenario
+          </label>
+
+          <select id="scenario">
+            <option value="A">
+              Scenario A: Agreement Popup
+            </option>
+
+            <option value="B">
+              Scenario B: Direct Checkout
+            </option>
+
+            <option value="C">
+              Scenario C: Pilih / Pesan Sekarang
+            </option>
+          </select>
+
+          <label for="available-after">
+            Available After Checks
+          </label>
+
+          <input
+            id="available-after"
+            type="number"
+            min="1"
+            max="20"
+            value="3"
+          />
+        </div>
+
+        <button id="reset-button" class="secondary-button">
+          Reset Simulator
+        </button>
+      </section>
+
+      <section class="panel" id="ticket-section">
+        <div class="section-heading">
+          <div>
+            <h2>Festival Presale 2</h2>
+
+            <p class="muted">
+              Ticket category
+            </p>
+          </div>
+
+          <span id="availability-badge" class="status unavailable">
+            Unavailable
+          </span>
+        </div>
+
+        <div class="ticket-information">
+          <div>
+            <span class="muted">Price</span>
+
+            <strong>Rp 500.000</strong>
+          </div>
+
+          <div>
+            <span class="muted">Maximum quantity</span>
+
+            <strong>3 Tickets</strong>
+          </div>
+        </div>
+
+        <div class="availability-controls">
+          <button
+            id="refresh-button"
+            class="secondary-button"
+            type="button"
+          >
+            Muat Ulang Ketersediaan Tiket
+          </button>
+
+          <p id="cooldown-message" aria-live="polite"></p>
+
+          <p id="check-counter" class="muted">
+            Availability checks: 0
+          </p>
+        </div>
+
+        <div id="purchase-controls" hidden>
+          <label for="quantity">
+            Jumlah Tiket
+          </label>
+
+          <select id="quantity">
+            <option value="">Pilih</option>
+            <option value="1">1 Tiket</option>
+            <option value="2">2 Tiket</option>
+            <option value="3">3 Tiket</option>
+          </select>
+
+          <button
+            id="order-button"
+            class="primary-button"
+            type="button"
+            disabled
+          >
+            Order Now
+          </button>
+        </div>
+      </section>
+
+      <section
+        id="checkout-section"
+        class="panel"
+        hidden
+      >
+        <span class="badge success-badge">
+          MOCK CHECKOUT
+        </span>
+
+        <h2>Checkout</h2>
+
+        <p>
+          This is a simulated checkout.
+          No real payment will be processed.
+        </p>
+
+        <div class="checkout-summary">
+          <p>
+            Event:
+            <strong>Intimate Night with Kahitna</strong>
+          </p>
+
+          <p>
+            Category:
+            <strong id="checkout-ticket-name">Festival Presale 2</strong>
+          </p>
+
+          <p>
+            Quantity:
+            <strong id="checkout-quantity"></strong>
+          </p>
+
+          <p>
+            Total:
+            <strong id="checkout-total"></strong>
+          </p>
+        </div>
+
+        <button
+          id="back-button"
+          class="secondary-button"
+          type="button"
+        >
+          Back to Tickets
+        </button>
+      </section>
+
+      <section class="panel">
+        <h2>Simulator Logs</h2>
+
+        <div
+          id="simulator-logs"
+          class="logs"
+          role="log"
+          aria-live="polite"
+        ></div>
+      </section>
+    </main>
+
+    <div
+      id="agreement-modal"
+      class="modal-backdrop"
+      hidden
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="agreement-title"
+      >
+        <h2 id="agreement-title">
+          Ticket Purchase Agreement
+        </h2>
+
+        <p>
+          Please review and accept the agreement
+          before proceeding to checkout.
+        </p>
+
+        <label class="checkbox-label">
+          <input
+            id="agreement-checkbox"
+            type="checkbox"
+          />
+
+          I agree to the ticket purchase terms.
+        </label>
+
+        <div class="modal-actions">
+          <button
+            id="cancel-agreement"
+            class="secondary-button"
+            type="button"
+          >
+            Cancel
+          </button>
+
+          <button
+            id="accept-agreement"
+            class="primary-button"
+            type="button"
+            disabled
+          >
+            Continue to Checkout
+          </button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

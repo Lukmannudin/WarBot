@@ -14,11 +14,73 @@ import { botConfig } from "../config/bot.config.js";
 const BROWSER_PROFILE_PATH = ".browser-profile";
 
 const PAGE_TIMEOUT_MS = 30_000;
-const PURCHASE_BUTTON_TIMEOUT_MS = 20_000;
 const NAVIGATION_TIMEOUT_MS = 15_000;
 const CHECKOUT_TIMEOUT_MS = 30_000;
 
 export class WebsiteInspector {
+
+    private async waitForTicketCategory(page: Page): Promise<boolean> {
+        const deadline =
+            Date.now() + botConfig.maxWaitForTicketCategoryMs;
+
+        const checkIntervalMs = 5_000;
+
+        console.log(
+            `[Bot] Waiting for ticket category: ${botConfig.ticketCategory}`,
+        );
+
+        while (Date.now() < deadline) {
+            const ticketCards = page.locator("div.ticket");
+
+            const matchingTicket = ticketCards.filter({
+                has: page.getByRole("heading", {
+                    name: botConfig.ticketCategory,
+                    exact: true,
+                }),
+            });
+
+            if (await matchingTicket.count() > 0) {
+                console.log(
+                    `[Bot] Ticket category found: ${botConfig.ticketCategory}`,
+                );
+
+                return true;
+            }
+
+            const refreshButton = page.getByRole("button", {
+                name: "Muat Ulang Ketersediaan Tiket",
+                exact: true,
+            });
+
+            if (
+                await refreshButton.isVisible() &&
+                await refreshButton.isEnabled()
+            ) {
+                console.log("[Bot] Refreshing ticket availability");
+
+                await refreshButton.click();
+
+                await page.waitForTimeout(1_000);
+            } else {
+                console.log(
+                    "[Bot] Refresh unavailable or in cooldown",
+                );
+            }
+
+            console.log(
+                "[Bot] Category not available yet. Checking again in 5 seconds",
+            );
+
+            await page.waitForTimeout(checkIntervalMs);
+        }
+
+        console.log(
+            `[Bot] Category ${botConfig.ticketCategory} not found within timeout`,
+        );
+
+        return false;
+    }
+
     async inspect(): Promise<void> {
         console.log("========================================");
         console.log("            LOKET TICKET BOT");
@@ -102,14 +164,18 @@ export class WebsiteInspector {
             return;
         }
 
-        if (pageState === "NO_TICKETS") {
-            await this.refreshTicketAvailability(page);
+        if (
+            pageState === "NO_TICKETS" ||
+            pageState === "TICKET_SELECTION"
+        ) {
+            const categoryFound = await this.waitForTicketCategory(page);
 
-            const ticketCards = page.locator("div.ticket h3");
-
-            if (await ticketCards.count() > 0) {
-                pageState = "TICKET_SELECTION";
+            if (!categoryFound) {
+                console.log("[Bot] Ticket category unavailable");
+                return;
             }
+
+            pageState = "TICKET_SELECTION";
         }
 
         if (pageState !== "TICKET_SELECTION") {
@@ -192,39 +258,6 @@ export class WebsiteInspector {
         console.log("[Bot] Payment remains manual");
     }
 
-    private async refreshTicketAvailability(page: Page): Promise<void> {
-        console.log("[Bot] Ticket categories not visible");
-
-        const refreshButton = page.getByRole("button", {
-            name: "Muat Ulang Ketersediaan Tiket",
-            exact: true,
-        });
-
-        if (!(await refreshButton.isEnabled())) {
-            console.log(
-                "[Bot] Refresh unavailable, respecting website cooldown",
-            );
-            return;
-        }
-
-        console.log("[Bot] Refreshing ticket availability");
-
-        await refreshButton.click();
-
-        try {
-            await page.locator("div.ticket h3").first().waitFor({
-                state: "visible",
-                timeout: 10_000,
-            });
-
-            console.log("[Bot] Ticket categories loaded");
-        } catch {
-            console.log(
-                "[Bot] Ticket categories are still unavailable",
-            );
-        }
-    }
-
     private async waitForCookieConsent(page: Page): Promise<void> {
         const consentText = page.getByText(
             /Kami menghargai privasi Anda/i,
@@ -253,36 +286,44 @@ export class WebsiteInspector {
     private async findBuyTicketButton(
         page: Page,
     ): Promise<Locator | null> {
-        console.log("[Bot] Looking for Beli Tiket");
+        console.log("[Bot] Waiting for Beli Tiket");
 
-        const buttons = page.getByRole("button", {
-            name: "Beli Tiket",
-            exact: true,
-        });
+        const deadline =
+            Date.now() + botConfig.maxWaitForBuyButtonMs;
 
-        try {
-            await buttons.first().waitFor({
-                state: "attached",
-                timeout: PURCHASE_BUTTON_TIMEOUT_MS,
+        const checkIntervalMs = 5_000;
+
+        while (Date.now() < deadline) {
+            const buttons = page.getByRole("button", {
+                name: "Beli Tiket",
+                exact: true,
             });
-        } catch {
-            return null;
-        }
 
-        const count = await buttons.count();
+            const count = await buttons.count();
 
-        for (let index = 0; index < count; index++) {
-            const button = buttons.nth(index);
+            for (let index = 0; index < count; index++) {
+                const button = buttons.nth(index);
 
-            if (
-                await button.isVisible() &&
-                await button.isEnabled()
-            ) {
-                console.log("[Bot] Beli Tiket is ready");
+                if (
+                    await button.isVisible() &&
+                    await button.isEnabled()
+                ) {
+                    console.log("[Bot] Beli Tiket is ready");
 
-                return button;
+                    return button;
+                }
             }
+
+            console.log(
+                "[Bot] Beli Tiket not ready. Checking again in 5 seconds",
+            );
+
+            await page.waitForTimeout(checkIntervalMs);
         }
+
+        console.log(
+            "[Bot] Beli Tiket unavailable after maximum wait time",
+        );
 
         return null;
     }

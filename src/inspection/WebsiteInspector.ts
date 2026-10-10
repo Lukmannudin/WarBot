@@ -288,12 +288,30 @@ export class WebsiteInspector {
     ): Promise<Locator | null> {
         console.log("[Bot] Waiting for Beli Tiket");
 
-        const deadline =
-            Date.now() + botConfig.maxWaitForBuyButtonMs;
+        const deadline = Date.now() + botConfig.maxWaitForBuyButtonMs;
 
         const checkIntervalMs = 5_000;
+        const reloadIntervalMs = 15_000;
+
+        let lastReloadTime = Date.now();
 
         while (Date.now() < deadline) {
+            // Stop reloading when the website requires user interaction.
+            const bodyText = await page.locator("body").innerText();
+
+            const requiresManualInteraction =
+                /captcha|recaptcha|verifikasi manusia|antrean|antrian|waiting room/i.test(
+                    bodyText,
+                );
+
+            if (requiresManualInteraction) {
+                console.log(
+                    "[Bot] CAPTCHA or queue detected. Please continue manually.",
+                );
+
+                return null;
+            }
+
             const buttons = page.getByRole("button", {
                 name: "Beli Tiket",
                 exact: true,
@@ -314,9 +332,26 @@ export class WebsiteInspector {
                 }
             }
 
-            console.log(
-                "[Bot] Beli Tiket not ready. Checking again in 5 seconds",
-            );
+            const elapsedSinceReload = Date.now() - lastReloadTime;
+
+            if (elapsedSinceReload >= reloadIntervalMs) {
+                console.log(
+                    "[Bot] Beli Tiket still unavailable. Reloading event page...",
+                );
+
+                await page.reload({
+                    waitUntil: "domcontentloaded",
+                    timeout: 30_000,
+                });
+
+                lastReloadTime = Date.now();
+
+                console.log("[Bot] Event page reloaded");
+            } else {
+                console.log(
+                    "[Bot] Beli Tiket not ready. Checking again in 5 seconds",
+                );
+            }
 
             await page.waitForTimeout(checkIntervalMs);
         }

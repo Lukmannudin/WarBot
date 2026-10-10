@@ -15,7 +15,7 @@ export const botConfig: BotConfig = {
     quantity: 3,
 
     // 10 Oktober 2026, pukul 10.00 WIB
-    startTime: "2026-10-10T10:00:00+07:00",
+    startTime: "2026-10-10T09:40:00+07:00",
 
     // Maksimal menunggu tombol Beli Tiket selama 5 menit
     maxWaitForBuyButtonMs: 300_000,

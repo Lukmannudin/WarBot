@@ -290,8 +290,8 @@ export class WebsiteInspector {
 
         const deadline = Date.now() + botConfig.maxWaitForBuyButtonMs;
 
-        const checkIntervalMs = 5_000;
-        const reloadIntervalMs = 15_000;
+        const checkIntervalMs = 500;
+        const reloadIntervalMs = 10_000;
 
         let lastReloadTime = Date.now();
 

@@ -17,70 +17,11 @@ const PAGE_TIMEOUT_MS = 30_000;
 const NAVIGATION_TIMEOUT_MS = 15_000;
 const CHECKOUT_TIMEOUT_MS = 30_000;
 
+const BUY_BUTTON_CHECK_INTERVAL_MS = 500;
+const EVENT_RELOAD_INTERVAL_MS = 15_000;
+const TICKET_CATEGORY_CHECK_INTERVAL_MS = 5_000;
+
 export class WebsiteInspector {
-
-    private async waitForTicketCategory(page: Page): Promise<boolean> {
-        const deadline =
-            Date.now() + botConfig.maxWaitForTicketCategoryMs;
-
-        const checkIntervalMs = 5_000;
-
-        console.log(
-            `[Bot] Waiting for ticket category: ${botConfig.ticketCategory}`,
-        );
-
-        while (Date.now() < deadline) {
-            const ticketCards = page.locator("div.ticket");
-
-            const matchingTicket = ticketCards.filter({
-                has: page.getByRole("heading", {
-                    name: botConfig.ticketCategory,
-                    exact: true,
-                }),
-            });
-
-            if (await matchingTicket.count() > 0) {
-                console.log(
-                    `[Bot] Ticket category found: ${botConfig.ticketCategory}`,
-                );
-
-                return true;
-            }
-
-            const refreshButton = page.getByRole("button", {
-                name: "Muat Ulang Ketersediaan Tiket",
-                exact: true,
-            });
-
-            if (
-                await refreshButton.isVisible() &&
-                await refreshButton.isEnabled()
-            ) {
-                console.log("[Bot] Refreshing ticket availability");
-
-                await refreshButton.click();
-
-                await page.waitForTimeout(1_000);
-            } else {
-                console.log(
-                    "[Bot] Refresh unavailable or in cooldown",
-                );
-            }
-
-            console.log(
-                "[Bot] Category not available yet. Checking again in 5 seconds",
-            );
-
-            await page.waitForTimeout(checkIntervalMs);
-        }
-
-        console.log(
-            `[Bot] Category ${botConfig.ticketCategory} not found within timeout`,
-        );
-
-        return false;
-    }
-
     async inspect(): Promise<void> {
         console.log("========================================");
         console.log("            LOKET TICKET BOT");
@@ -104,11 +45,13 @@ export class WebsiteInspector {
 
             await this.waitForCookieConsent(page);
 
+            await this.waitUntilPurchaseTime(page);
+
             const buyButton = await this.findBuyTicketButton(page);
 
             if (!buyButton) {
                 console.log(
-                    "[Bot] Beli Tiket is unavailable or disabled",
+                    "[Bot] Beli Tiket is unavailable or requires manual intervention",
                 );
                 return;
             }
@@ -142,6 +85,202 @@ export class WebsiteInspector {
         });
 
         console.log(`[Bot] Current URL: ${page.url()}`);
+    }
+
+    private async waitUntilPurchaseTime(page: Page): Promise<void> {
+        const purchaseTime = new Date(
+            botConfig.purchaseStartTime,
+        ).getTime();
+
+        if (Number.isNaN(purchaseTime)) {
+            throw new Error("[Bot] Invalid purchaseStartTime");
+        }
+
+        console.log(
+            `[Bot] Waiting for purchase time: ${botConfig.purchaseStartTime}`,
+        );
+
+        while (Date.now() < purchaseTime) {
+            const remainingMs = purchaseTime - Date.now();
+
+            await page.waitForTimeout(
+                Math.min(1_000, remainingMs),
+            );
+        }
+
+        console.log("[Bot] Purchase time reached!");
+    }
+
+    private async findBuyTicketButton(
+        page: Page,
+    ): Promise<Locator | null> {
+        console.log("[Bot] Waiting for Beli Tiket");
+
+        const deadline =
+            Date.now() + botConfig.maxWaitForBuyButtonMs;
+
+        let lastReloadTime = Date.now();
+        let lastStatusLogTime = 0;
+
+        while (Date.now() < deadline) {
+            if (await this.requiresManualInteraction(page)) {
+                console.log(
+                    "[Bot] Queue, CAPTCHA, or rate limit detected",
+                );
+                console.log(
+                    "[Bot] Automatic reload stopped. Please continue manually.",
+                );
+
+                return null;
+            }
+
+            const buttons = page.getByRole("button", {
+                name: "Beli Tiket",
+                exact: true,
+            });
+
+            const buttonCount = await buttons.count();
+
+            for (let index = 0; index < buttonCount; index++) {
+                const button = buttons.nth(index);
+
+                if (
+                    (await button.isVisible()) &&
+                    (await button.isEnabled())
+                ) {
+                    console.log("[Bot] Beli Tiket is ready!");
+
+                    return button;
+                }
+            }
+
+            const elapsedSinceReload =
+                Date.now() - lastReloadTime;
+
+            if (elapsedSinceReload >= EVENT_RELOAD_INTERVAL_MS) {
+                console.log(
+                    "[Bot] Beli Tiket unavailable. Reloading event page...",
+                );
+
+                try {
+                    await page.reload({
+                        waitUntil: "domcontentloaded",
+                        timeout: PAGE_TIMEOUT_MS,
+                    });
+                } catch (error) {
+                    console.log(
+                        "[Bot] Reload failed. Stopping automatic reload.",
+                        error,
+                    );
+
+                    return null;
+                }
+
+                lastReloadTime = Date.now();
+
+                console.log("[Bot] Event page reloaded");
+
+                continue;
+            }
+
+            if (Date.now() - lastStatusLogTime >= 5_000) {
+                console.log(
+                    "[Bot] Beli Tiket not ready. Checking every 500 ms",
+                );
+
+                lastStatusLogTime = Date.now();
+            }
+
+            await page.waitForTimeout(
+                BUY_BUTTON_CHECK_INTERVAL_MS,
+            );
+        }
+
+        console.log(
+            "[Bot] Beli Tiket unavailable after maximum wait time",
+        );
+
+        return null;
+    }
+
+    private async requiresManualInteraction(
+        page: Page,
+    ): Promise<boolean> {
+        const bodyText = await page
+            .locator("body")
+            .innerText({
+                timeout: 3_000,
+            })
+            .catch(() => "");
+
+        const manualInteractionPattern =
+            /captcha|recaptcha|verifikasi manusia|anda sedang dalam antrean|anda sedang dalam antrian|waiting room|too many requests|terlalu banyak permintaan/i;
+
+        return manualInteractionPattern.test(bodyText);
+    }
+
+    private async waitForTicketCategory(
+        page: Page,
+    ): Promise<boolean> {
+        const deadline =
+            Date.now() + botConfig.maxWaitForTicketCategoryMs;
+
+        console.log(
+            `[Bot] Waiting for ticket category: ${botConfig.ticketCategory}`,
+        );
+
+        while (Date.now() < deadline) {
+            const ticketCards = page.locator("div.ticket");
+
+            const matchingTicket = ticketCards.filter({
+                has: page.getByRole("heading", {
+                    name: botConfig.ticketCategory,
+                    exact: true,
+                }),
+            });
+
+            if ((await matchingTicket.count()) > 0) {
+                console.log(
+                    `[Bot] Ticket category found: ${botConfig.ticketCategory}`,
+                );
+
+                return true;
+            }
+
+            const refreshButton = page.getByRole("button", {
+                name: "Muat Ulang Ketersediaan Tiket",
+                exact: true,
+            });
+
+            if (
+                (await refreshButton.isVisible()) &&
+                (await refreshButton.isEnabled())
+            ) {
+                console.log("[Bot] Refreshing ticket availability");
+
+                await refreshButton.click();
+
+                await page.waitForTimeout(1_000);
+            } else {
+                console.log(
+                    "[Bot] Refresh unavailable or in cooldown",
+                );
+            }
+
+            console.log(
+                "[Bot] Category not available yet. Checking again in 5 seconds",
+            );
+
+            await page.waitForTimeout(
+                TICKET_CATEGORY_CHECK_INTERVAL_MS,
+            );
+        }
+
+        console.log(
+            `[Bot] Category ${botConfig.ticketCategory} not found within timeout`,
+        );
+
+        return false;
     }
 
     private async processTicketPage(page: Page): Promise<void> {
@@ -182,6 +321,7 @@ export class WebsiteInspector {
             console.log(
                 `[Bot] Cannot continue from page state: ${pageState}`,
             );
+
             return;
         }
 
@@ -279,88 +419,10 @@ export class WebsiteInspector {
                 timeout: 120_000,
             });
         } catch {
-            console.log("[Bot] Cookie consent not detected or dismissed");
+            console.log(
+                "[Bot] Cookie consent not detected or dismissed",
+            );
         }
-    }
-
-    private async findBuyTicketButton(
-        page: Page,
-    ): Promise<Locator | null> {
-        console.log("[Bot] Waiting for Beli Tiket");
-
-        const deadline = Date.now() + botConfig.maxWaitForBuyButtonMs;
-
-        const checkIntervalMs = 500;
-        const reloadIntervalMs = 10_000;
-
-        let lastReloadTime = Date.now();
-
-        while (Date.now() < deadline) {
-            // Stop reloading when the website requires user interaction.
-            const bodyText = await page.locator("body").innerText();
-
-            const requiresManualInteraction =
-                /captcha|recaptcha|verifikasi manusia|antrean|antrian|waiting room/i.test(
-                    bodyText,
-                );
-
-            if (requiresManualInteraction) {
-                console.log(
-                    "[Bot] CAPTCHA or queue detected. Please continue manually.",
-                );
-
-                return null;
-            }
-
-            const buttons = page.getByRole("button", {
-                name: "Beli Tiket",
-                exact: true,
-            });
-
-            const count = await buttons.count();
-
-            for (let index = 0; index < count; index++) {
-                const button = buttons.nth(index);
-
-                if (
-                    await button.isVisible() &&
-                    await button.isEnabled()
-                ) {
-                    console.log("[Bot] Beli Tiket is ready");
-
-                    return button;
-                }
-            }
-
-            const elapsedSinceReload = Date.now() - lastReloadTime;
-
-            if (elapsedSinceReload >= reloadIntervalMs) {
-                console.log(
-                    "[Bot] Beli Tiket still unavailable. Reloading event page...",
-                );
-
-                await page.reload({
-                    waitUntil: "domcontentloaded",
-                    timeout: 30_000,
-                });
-
-                lastReloadTime = Date.now();
-
-                console.log("[Bot] Event page reloaded");
-            } else {
-                console.log(
-                    "[Bot] Beli Tiket not ready. Checking again in 5 seconds",
-                );
-            }
-
-            await page.waitForTimeout(checkIntervalMs);
-        }
-
-        console.log(
-            "[Bot] Beli Tiket unavailable after maximum wait time",
-        );
-
-        return null;
     }
 
     private async openTicketSelection(
@@ -382,7 +444,9 @@ export class WebsiteInspector {
                 },
             );
 
-            console.log("[Bot] Ticket page opened in current tab");
+            console.log(
+                "[Bot] Ticket page opened in current tab",
+            );
 
             return page;
         } catch {
@@ -397,7 +461,9 @@ export class WebsiteInspector {
                     timeout: NAVIGATION_TIMEOUT_MS,
                 });
 
-                console.log("[Bot] Ticket page opened in new tab");
+                console.log(
+                    "[Bot] Ticket page opened in new tab",
+                );
 
                 return newPage;
             }

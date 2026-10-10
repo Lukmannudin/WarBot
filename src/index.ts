@@ -10,11 +10,14 @@ async function main(): Promise<void> {
   console.log(`[Bot] Event: ${botConfig.eventUrl}`);
   console.log(`[Bot] Category: ${botConfig.ticketCategory}`);
   console.log(`[Bot] Quantity: ${botConfig.quantity}`);
-  console.log(`[Bot] Start time: ${botConfig.startTime}`);
+  console.log(`[Bot] Browser start time: ${botConfig.browserStartTime}`);
+  console.log(`[Bot] Purchase start time: ${botConfig.purchaseStartTime}`);
 
   const scheduler = new StartTimeScheduler();
 
-  await scheduler.waitUntil(botConfig.startTime);
+  console.log("[Bot] Waiting for browser start time");
+
+  await scheduler.waitUntil(botConfig.browserStartTime);
 
   console.log("[Bot] Starting Loket automation");
 
